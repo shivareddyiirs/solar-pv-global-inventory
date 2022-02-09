@@ -8,15 +8,19 @@ from shapely.ops import transform
 from PIL import Image, ImageDraw
 import multiprocessing as mp
 
-import descarteslabs as dl
+#import descarteslabs as dl
+import ee
 from area import area
 import pyproj
 
-from utils import *
+#from utils import *
 
-logging.info(f'Initialising data handler...')
-raster_client = dl.Raster()
-metadata_client = dl.Metadata()
+logging.info(f'Initialising Earth Engine')
+ee.Authenticate()
+ee.Initialize()
+# data download from earth engine
+#raster_client = dl.Raster()
+#metadata_client = dl.Metadata()
 
 trn_dltiles = json.load(open(os.path.join(os.getcwd(),'data','all_trn_dltiles.geojson'),'r'))['features']
 trn_polygons = json.load(open(os.path.join(os.getcwd(),'data','all_trn_polygons.geojson'),'r'))['features']
