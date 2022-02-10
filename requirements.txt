@@ -1,6 +1,6 @@
 geojson==2.5.0
 matplotlib==3.2.0
-shapely==1.7.0
+shapely
 pillow==7.0.0
 descarteslabs==1.1.2
 area==1.1.1
