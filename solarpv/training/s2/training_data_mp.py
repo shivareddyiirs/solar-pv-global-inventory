@@ -7,13 +7,14 @@ from shapely.affinity import affine_transform
 from shapely.ops import transform
 from PIL import Image, ImageDraw
 import multiprocessing as mp
-
+import os,site
+site.addsitedir(os.path.abspath(os.path.join(__file__ ,"../../..")))
 #import descarteslabs as dl
 import ee
 from area import area
 import pyproj
 
-#from utils import *
+from utils import *
 
 logging.info(f'Initialising Earth Engine')
 ee.Authenticate()
