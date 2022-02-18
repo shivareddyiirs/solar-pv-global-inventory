@@ -11,26 +11,30 @@ import os,site
 site.addsitedir(os.path.abspath(os.path.join(__file__ ,"../../..")))
 #import descarteslabs as dl
 import ee
+from geemap import geojson_to_ee
 from area import area
 import pyproj
-
+from scipy import ndimage
+import numpy as np
 from utils import *
 
 logging.info(f'Initialising Earth Engine')
-ee.Authenticate()
-ee.Initialize()
+ee.Initialize(opt_url='https://earthengine-highvolume.googleapis.com')
+s2=ee.ImageCollection("COPERNICUS/S2_SR")
 # data download from earth engine
 #raster_client = dl.Raster()
 #metadata_client = dl.Metadata()
-
 trn_dltiles = json.load(open(os.path.join(os.getcwd(),'data','all_trn_dltiles.geojson'),'r'))['features']
 trn_polygons = json.load(open(os.path.join(os.getcwd(),'data','all_trn_polygons.geojson'),'r'))['features']
-
-
+#ee_trn=geojson_to_ee(trn_dltiles)
+#ee_polygon=geojson_to_ee(trn_polygon)
+print("importing training tiles and polygons completed")
 def annotation_from_tile(tile_key,ii_t,mode='trn'):
     print(f'Fetching tile {tile_key}')
-    tile = raster_client.dltile(tile_key)
-
+    tile = trn_dltiles[ii_t]
+    tilesize=tile['properties']['tilesize']
+    ee_trn=geojson_to_ee({'type':'FeatureCollection','features':[tile]})
+    
     # get a random season
     season = np.random.choice([0,1,2,3])
 
@@ -48,87 +52,56 @@ def annotation_from_tile(tile_key,ii_t,mode='trn'):
     }
 
     # get scenes for dltile
-    scene_ind=0
-    scenes = metadata_client.search('sentinel-2:L1C', geom=tile, start_datetime=season_start[season],  end_datetime=season_end[season], cloud_fraction=0.2, limit=15)['features']
-    scenes = sorted(scenes, key=lambda k: k.properties.cloud_fraction, reverse=False)
+    scene=s2.filterBounds(ee_trn).filterDate(season_start[season],season_end[season]).filterMetadata('CLOUDY_PIXEL_PERCENTAGE','less_than', 20).sort('CLOUDY_PIXEL_PERCENTAGE').first()
     if not scenes:
         return None
-    scene=scenes[scene_ind]
-
-    # get geometry transformations
-    WGS84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
-    tile_srs = tile["properties"]["proj4"]
-    dt = tile['properties']['geotrans']
-    dt_shapely = [
-            1 / dt[1],
-            dt[2],
-            dt[4],
-            1 / dt[5],
-            -dt[0] / dt[1],
-            -dt[3] / dt[5],
-        ]
-
-    utm_proj = pyproj.Proj(tile_srs)
-    wgs_proj = pyproj.Proj(WGS84)
-
-    projection_func = partial(pyproj.transform, wgs_proj, utm_proj)
-
-    tile_poly = geometry.shape(tile['geometry'])
+    print("getting 10m bands as array")
+    scene_part1=scene.select(['B2','B3','B4','B8'])
+    tmp_arr1=geemap.ee_to_numpy(scene_part1,region=ee_trn)[0:tilesize,0:tilesize,:]
+    print("getting 20m bands as array")
+    scene_part2=scene.select(['B5','B6','B7','B8A','B11','B12')
+    tmp_arr2=geemap.ee_to_numpy(scene_part2,region=ee_trn)[0:tilesize/2,0:tilesize/2,:]
+    print("resampling 20m bands")
+    tmp_arr2=ndimage.zoom(tmp_arr2,(2,2,1),order=0)
+    print("merging both into single array")
+    trn_tile=np.concatenate((tmp_arr1,tmp_arr2),axis=2)
+    print(trainig array shape is"+trn_tile.shape)
 
     # get intersecting polygons
     tile_poly = geometry.Polygon(tile['geometry']['coordinates'][0])
-    tile_poly_utm = transform(projection_func, tile_poly)
 
     if mode=='trn':
         all_polygons = [geometry.shape(pp['geometry']) for pp in trn_polygons]
     else:
         all_polygons = [geometry.shape(pp['geometry']) for pp in test_polygons]
 
-    intersect_polys = [pp for pp in all_polygons if pp.intersects(tile_poly)] #transform(projection_func, pp).intersects(tile_poly_utm)]
-
-    # get array
-    fill_frac = 0.
-    while (fill_frac<0.8) and (scene_ind<len(scenes)):
-        ### get the array data - comes back as bytes [0:255]
-        bands = ['red', 'green', 'blue', 'nir', 'red-edge','red-edge-2', 'red-edge-3', 'red-edge-4', 'swir1','swir2','water-vapor','cirrus','coastal-aerosol','alpha']
-
-        tile_arr, meta = raster_client.ndarray(
-            scene.id, bands=bands, scales=[[0, 10000]] * 14, ot='UInt16', dltile=tile['properties']['key'], processing_level='surface'
-        )
-        fill_frac = np.sum(tile_arr[:,:,-1]>0)/tile_arr.shape[0]/tile_arr.shape[1]
-        if fill_frac<0.8:
-            scene_ind+=1
-            scene = scenes[scene_ind]
+    intersect_polys = [pp for pp in all_polygons if pp.intersects(tile_poly)] 
 
     # clip tile arr [0.,1.]
     tile_arr = (tile_arr/255.).clip(0.,1.)
 
 
     # make an annotation array
-    annotations = np.zeros((tile['properties']['tilesize'], tile['properties']['tilesize'])) #np.ones((arr.shape[0], arr.shape[1]))*128
+    annotations = np.zeros((tilesize,tilesize)) #np.ones((arr.shape[0], arr.shape[1]))*128
     im = Image.fromarray(annotations, mode='L')
     draw = ImageDraw.Draw(im)
-
     # draw annotation polygons
     for pp in intersect_polys:
+    print(pp)
+    pp_intersection = pp.intersection(tile_poly)
 
-        pp_utm = transform(projection_func, pp)
+    if pp_intersection.type == 'MultiPolygon':
+        sub_geoms = list(pp_intersection)
+    else:
+        sub_geoms = [pp_intersection]
 
-        pp_utm_intersection = pp_utm.intersection(tile_poly_utm)
+    for sub_geom in sub_geoms:
+        xs, ys = sub_geom.exterior.xy
+        draw.polygon(list(zip(xs, ys)), fill=255)
 
-        if pp_utm_intersection.type == 'MultiPolygon':
-            sub_utm_geoms = list(pp_utm_intersection)
-        else:
-            sub_utm_geoms = [pp_utm_intersection]
-
-        for sub_utm_geom in sub_utm_geoms:
-            pix_geom = affine_transform(sub_utm_geom, dt_shapely)
-            xs, ys = pix_geom.exterior.xy
-            draw.polygon(list(zip(xs, ys)), fill=255)
-
-            for hole in sub_utm_geom.interiors:
-                xs,ys = hole.xy
-                draw.polygon(list(zip(xs, ys)), fill=0)
+        for hole in sub_geom.interiors:
+            xs,ys = hole.xy
+            draw.polygon(list(zip(xs, ys)), fill=0)
 
 
     annotations = np.array(im)
@@ -157,8 +130,8 @@ if __name__ == "__main__":
 
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-    keys = [tt['properties']['key'] for tt in trn_dltiles[0:12]]
-    multidownload(3,keys)
+    keys = [tt['properties']['key'] for tt in trn_dltiles[0:2]]
+    multidownload(2,keys)
 
 
 
