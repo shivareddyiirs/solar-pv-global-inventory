@@ -11,7 +11,7 @@
             null,
             200,
             200,
-            14
+            10
           ],
           "dtype": "float32",
           "sparse": false,

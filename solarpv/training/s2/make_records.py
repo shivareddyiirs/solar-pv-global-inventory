@@ -16,5 +16,15 @@ def make_records(directory):
     print("Total records are "+str(len(records)))
     shuffle(records)
     pickle.dump(records, open(os.path.join(directory,'records.pickle'),'wb'))
+    print("testing the sample records")
+    trn_records=pickle.load(open(os.path.join(directory,'records.pickle'),'rb'))
+    val_indexes = [1,2]
+    val_records = [rr for ii,rr in enumerate(trn_records) if ii in val_indexes]
+    for record in val_records:
+        data=record["data"]
+        meta=record["meta"]
+        test=np.load(data)
+        print(type(test['data']))
+   
 if __name__ == "__main__":
-    make_records("C:\\hpc\\data\\training\\S2_unet")
+    make_records("C:\\hpc\\data\\training\\S2_unet2")

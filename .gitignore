@@ -7,3 +7,5 @@ data/*
 **/.ipynb_checkpoints/*
 makefigs/DEP/*
 bin/get_dl.py
+*.csv
+*.png

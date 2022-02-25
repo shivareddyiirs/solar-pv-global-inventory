@@ -25,7 +25,7 @@ from keras.optimizers import Adam
 from keras.metrics import categorical_accuracy
 from keras.models import model_from_json
 from random import shuffle
-from keras.callbacks import CSVLogger, Callback, ModelCheckpoint
+from keras.callbacks import CSVLogger, Callback, ModelCheckpoint,EarlyStopping
 import keras.backend as K
 
 # conf
@@ -56,7 +56,7 @@ class HistPlot(Callback):
         print (logs)
 
         Y = np.zeros((200,200,200,2))
-        X = np.zeros((200,200,200,14))
+        X = np.zeros((200,200,200,10))
         for ii in range(10):
             #print (ii)
             
@@ -185,7 +185,7 @@ class TrainS2Unet:
         self.N_CLASSES = 2
         self.EPOCHS = 40
         self.LEARNING_RATE = 1e-7
-        self.INPUT_SHAPE = (200,200,14)
+        self.INPUT_SHAPE = (200,200,10)
 
         # data records
         self.trn_records = pickle.load(open(trn_records_pickle,'rb'))
@@ -232,22 +232,23 @@ class TrainS2Unet:
         # instantiate callbacks
         csv_cb = CSVLogger('log.csv', append=True, separator=';')
         hist_plot_cb = HistPlot(validation_generator=val_generator, outfile='trn_bootstrap_metrics')
-        chkpt_cb = ModelCheckpoint('model_progress.h5', period=5)
+        chkpt_cb = ModelCheckpoint('C:\\hpc\\data\\training\\S2_unet\\model_progress.h5', save_best_only=True)
+        early_stop_cb=EarlyStopping(patience=4,restore_best_weights=True)
 
         history = model.fit_generator(
                                 generator=trn_generator, 
                                 validation_data=val_generator, 
                                 verbose=1,  
                                 epochs=self.EPOCHS, 
-                                callbacks=[csv_cb, hist_plot_cb,chkpt_cb])
+                                callbacks=[csv_cb, hist_plot_cb,chkpt_cb,early_stop_cb])
 
         model.save(self.outp_fname)
 
 if __name__ == "__main__":
     trn = TrainS2Unet(
-        data_dir=os.path.join(os.getcwd(),'data','S2_unet'),
-        outp_fname='s2_unet.h5',
-        trn_records_pickle=os.path.join(os.getcwd(),'data','S2_unet','records.pickle'))
-    trn.train(os.path.join(os.getcwd(),'solarpv','training','model_resunet.json'))
+        data_dir="C:\\hpc\\data\\training\\S2_unet\\",
+        outp_fname='C:\\hpc\\data\\training\\S2_unet\\s2_unet.h5',
+        trn_records_pickle=os.path.join("C:\\hpc\\data\\training\\S2_unet\\",'records.pickle'))
+    trn.train(os.path.join(os.getcwd(),'solarpv','training','s2','model_resunet.json'))
 
     
