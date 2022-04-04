@@ -27,4 +27,4 @@ def make_records(directory):
         print(type(test['data']))
    
 if __name__ == "__main__":
-    make_records("C:\\hpc\\data\\training\\S2_unet2")
+    make_records("../S2_unet2")

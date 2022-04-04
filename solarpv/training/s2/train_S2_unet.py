@@ -234,7 +234,7 @@ class TrainS2Unet:
         csv_cb = CSVLogger('log.csv', append=True, separator=';')
         hist_plot_cb = HistPlot(validation_generator=val_generator, outfile='trn_bootstrap_metrics')
         chkpt_cb = ModelCheckpoint('C:\\hpc\\data\\training\\S2_unet\\model_progress.h5', save_best_only=True)
-        early_stop_cb=EarlyStopping(patience=4,restore_best_weights=True)
+        early_stop_cb=EarlyStopping(patience=10,restore_best_weights=True)
 
         history = model.fit_generator(
                                 generator=trn_generator, 
